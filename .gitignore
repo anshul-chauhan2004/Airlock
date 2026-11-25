@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dist-extension/
+release/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+coverage/
+*.pem
+*.key
+*service-account*.json
+*serviceAccount*.json
