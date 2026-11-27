@@ -1,3 +1,13 @@
+# Birth-date fix — 27 November 2026
+
+Fixed the confirmed “born on” defect in `src/privacy.ts`. Birth-date recognition now also accepts “born” and “born on”, including case variations and whitespace across lines. Recognized dates enter the existing privacy-choice and placeholder pipeline, so a correct detector result is no longer discarded as a public date.
+
+Two regression tests failed before the fix and pass after it. They cover named-month, numeric, and ISO dates; existing DOB/date-of-birth labels; detection with and without model entities; preservation of notice dates/deadlines; exact restoration; blocking a reintroduced birth date; and explicit keep choices.
+
+Validation: **34/34 tests pass**. Web and extension builds and TypeScript checks pass. These are deterministic privacy-pipeline checks, not a new browser or live-model test. Earlier birth-date findings below are historical and superseded by this fix; other findings are unchanged.
+
+---
+
 # Submission verification update — 27 November 2026
 
 The maintainer reports judge onboarding verified. The demo has been recorded and uploaded: https://www.youtube.com/watch?v=73lBKQSA-4U. Video visibility, playback quality, and Devpost submission are not certified by the automated checks below.

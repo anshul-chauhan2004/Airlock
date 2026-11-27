@@ -232,7 +232,7 @@ Runtime Firebase initialization currently supports the unpacked extension and th
 
 See [TEST_REPORT.md](TEST_REPORT.md) for the latest measured results and unresolved findings. Passing code tests does not establish live-model accuracy.
 
-The automated suite contains 32 tests covering privacy rules, explicit keep decisions, placeholder restoration, question validation, supporting passages, imports, page extraction, request bookkeeping, and session serialization/recovery with mocked Chrome storage. On 27 November 2026, all 32 tests, TypeScript checks, the web build, and the extension build passed.
+The automated suite contains 34 tests covering privacy rules, explicit keep decisions, placeholder restoration, question validation, supporting passages, imports, page extraction, request bookkeeping, and session serialization/recovery with mocked Chrome storage. On 27 November 2026, all 34 tests, TypeScript checks, the web build, and the extension build passed.
 
 Development browser checks have exercised the packaged extension's imports, offline image and scanned-PDF OCR, local PDF font and character-map loading, 330-pixel layout, stage navigation, back navigation, result invalidation, and reset behavior. These browser checks were run separately from the committed test suite.
 
@@ -240,7 +240,7 @@ Privacy controls and document questions were also exercised with a simulated loc
 
 Worker tests cover on-demand extraction, direct-file routing, and restricted-page errors. Live document viewers vary; inaccessible ones fall back to file import.
 
-**Known limitation:** a date introduced by “born on” can remain visible even when the detector identifies it. “Date of birth” and “DOB” labels are recognized. This was reproduced on 27 November 2026; manually hide such dates in the preview before sharing. See the test report for the reproduction and other unresolved findings.
+Birth-date regression checks cover “born on”, “born”, “Date of birth”, and “DOB”, including case variations, line breaks, and numeric dates. These dates are hidden with or without a model detection; notice dates and deadlines remain visible. Detection is not exhaustive: review the preview for missed details. See the test report for measured coverage and other unresolved findings.
 
 ## Troubleshooting
 

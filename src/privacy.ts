@@ -79,7 +79,7 @@ export function findFormattedDetails(text: string): Entity[] {
 const month = '(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)'
 const dateValue = `(?:\\d{1,2}(?:st|nd|rd|th)?[ \\t]+${month}(?:[ ,]+\\d{4})?|${month}[ \\t]+\\d{1,2}(?:st|nd|rd|th)?(?:,?[ \\t]+\\d{4})?|${month}[ \\t]+\\d{4}|\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}|\\d{4}-\\d{2}-\\d{2})`
 const dates = new RegExp(`\\b${dateValue}\\b`, 'gi')
-const birthDate = new RegExp(`\\b(?:date of birth|d\\.?o\\.?b\\.?)\\s*[:=]?\\s*(${dateValue})\\b`, 'gi')
+const birthDate = new RegExp(`\\b(?:date\\s+of\\s+birth|d\\.?o\\.?b\\.?|born(?:\\s+on)?)\\s*[:=]?\\s*(${dateValue})\\b`, 'gi')
 const nameWord = "[A-Z]\\p{L}+(?:[-’']\\p{L}+)*"
 const namesWithTitles = new RegExp(`\\b(?:Mr\\.?|Mrs\\.?|Ms\\.?|Dr\\.?|Shri|Sardar|Smt\\.?)[ \\t]+(${nameWord}(?:[ \\t]+${nameWord}){0,3})`, 'gu')
 

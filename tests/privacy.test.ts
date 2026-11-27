@@ -114,3 +114,40 @@ test('question validation retains real names, identifiers and new contact detail
   assert.equal(containsDetectedEntity(prepared.text, prepared), false)
   assert.equal(restoreOriginals(prepared.text, prepared.originals), question)
 })
+
+
+test('birth-date wording is hidden with or without model detections while public dates survive', () => {
+  for (const [label, date] of [
+    ['born on', '15 March 1985'],
+    ['Born', 'March 15, 1985'],
+    ['BORN ON:', '1985-03-15'],
+    ['born\non', '15/03/1985'],
+    ['date of birth', '15 March 1985'],
+    ['DOB:', '15 March 1985'],
+    ['D.O.B.', '15 March 1985'],
+  ]) {
+    const document = `Mr. Arun Das, ${label} ${date}. Notice date: 12 November 2026. Submit by 10 December 2026.`
+    for (const detected of [[], [{ text: date, type: 'identifier' }]]) {
+      const review = reviewChoices(document, privacyChoices(document, detected))
+      assert.ok(!review.text.includes(date), `Birth date leaked for ${label} ${date}`)
+      assert.ok(review.text.includes('12 November 2026'))
+      assert.ok(review.text.includes('10 December 2026'))
+      assert.equal(restoreOriginals(review.text, review.originals), document)
+      assert.equal(containsDetectedEntity(review.text, review), false)
+      assert.equal(containsDetectedEntity(review.text + ` Born on ${date}`, review), true)
+    }
+  }
+})
+
+test('birth-date choices can be explicitly kept without hiding ordinary notice dates', () => {
+  const document = 'Born on 15 March 1985. Submit by 10 December 2026.'
+  const choices = privacyChoices(document, [
+    { text: '15 March 1985', type: 'identifier' },
+    { text: '10 December 2026', type: 'identifier' },
+  ])
+  assert.ok(choices.some(entity => entity.text === '15 March 1985'))
+  assert.ok(!choices.some(entity => entity.text === '10 December 2026'))
+  const review = reviewChoices(document, choices.map(entity => ({ ...entity, hidden: false })))
+  assert.equal(review.text, document)
+  assert.equal(containsDetectedEntity(review.text, review), false)
+})
