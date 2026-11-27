@@ -2,6 +2,8 @@
 
 **Choose what leaves your device.**
 
+[Watch the demo on YouTube](https://www.youtube.com/watch?v=73lBKQSA-4U) · [Installation](#install-the-unpacked-extension) · [Verification status](#verification-status)
+
 Airlock is a Chrome extension that helps people review sensitive documents before sharing them with AI. Open a notice, invoice, letter, or scanned page, find private details on your device, and approve an editable version with placeholders. Use that version for a document review, an action checklist, a question, or an export to another AI tool.
 
 The extension uses Firebase AI Logic for both Chrome's Gemini Nano model and cloud Gemini inference. Original values are restored in the browser after a response arrives.
@@ -18,8 +20,9 @@ The extension uses Firebase AI Logic for both Chrome's Gemini Nano model and clo
 - **Reviewed questions.** Run questions through local privacy checks, inspect their prepared text, and request answers with supporting passages.
 - **Hybrid analysis.** Analysis prefers cloud inference and falls back to on-device inference when available.
 - **AI request details.** Inspect the latest request's document, question, full prompt, chosen route, and actual inference source.
+- **Session recovery.** Reopen the panel in the same Chrome window to restore your document, privacy choices, reviewed text, questions, results, and completed scan chunks. Interrupted requests require an explicit retry.
 - **Text export.** Copy the reviewed text or save it as a TXT file for use elsewhere.
-- **Firebase Remote Config.** Fetch a validated cloud model name and document character limit, with bundled defaults.
+- **Developer Remote Config tools.** The localhost development app can fetch a validated cloud model name and document limit. The packaged extension uses bundled defaults.
 
 ## Requirements
 
@@ -85,7 +88,7 @@ Choose **Open file** or paste a document. File extraction happens locally. Check
 
 For a webpage, highlight text, right-click **Open in Airlock**, and choose **Review selected text** in the panel. For a PDF open in Chrome, try **Use this page**. Local files require **Allow access to file URLs** in Chrome's extension details. Use **Open file** when a viewer blocks extraction.
 
-Click **Prepare document**. Airlock advances to the privacy step after detection succeeds.
+Click **Find private details**. Airlock advances to the privacy step after detection succeeds.
 
 ### Hide
 
@@ -112,6 +115,10 @@ Choose an action.
 
 Click **Analyze** to generate a result. Analysis prefers the cloud and can fall back to the device. The result reports the source actually used, such as `in_cloud` or `on_device`.
 
+### Resume a session
+
+Closing the panel does not intentionally erase your work. Reopen it in the same window to resume. Model instances are recreated, so use **Set up local AI to continue** before another AI operation. An interrupted operation is never automatically resent; use **Retry** or the normal action button. Completed scan chunks are reused. A cloud request interrupted by panel closure may already have reached the server, so its request details show completion as unknown. File imports interrupted before text extraction may need the file selected again. If a session save fails, Airlock displays a warning; keep the panel open to retain the latest work.
+
 ### Result
 
 The result screen offers **Ask a question**, **Edit preview**, and **New document**. Open the **⋯** response control for supporting sources, the model response before local restoration, and the AI request details.
@@ -126,7 +133,7 @@ The action checklist also includes a local extractor for numbered instructions i
 
 1. Open a webpage or document in Chrome and click Airlock’s toolbar icon.
 2. Click **Use this page** and allow access to the requested site if Chrome asks. Selected text takes priority on regular webpages; otherwise Airlock extracts visible page text.
-3. Check the imported text, then choose **Prepare document** and continue through Hide → Review → Analyze.
+3. Check the imported text, then choose **Find private details** and continue through Hide → Review → Analyze.
 
 Office Online public viewer links (`view.officeapps.live.com/op/view.aspx?src=…`) are resolved to their source document, with access requested for that source host. Direct PDF and DOCX URLs use the existing local document reader, including OCR for scanned PDFs. Local files require **Allow access to file URLs** in Chrome’s Airlock details. Protected viewers, canvas-based editors (including some online document editors), embedded frames, and inaccessible downloads may require **Open file** or copying a selected passage. Legacy `.doc` files must be converted to DOCX or PDF. Long pages ask you to select a shorter passage; extraction never silently reviews only part of a page.
 
@@ -150,7 +157,7 @@ After review, the document field could contain this version.
 
 Airlock keeps the mapping from `[PERSON_1]` to `Maya Rao` in browser memory and restores the name locally in the returned answer. Any original value retained in the approved preview is included in the request. Surrounding document context can also reveal information about its subject.
 
-The original file and placeholder mapping stay on the device. Document text, questions, results, and receipts are held in the panel's memory. Firebase SDKs separately maintain service state such as App Check tokens and installation identifiers. Explicit copy and save actions place reviewed text in the clipboard or a downloaded file.
+The original file stays on the device. In the extension, document text, placeholder mappings, privacy choices, questions, results, and completed scan chunks are saved in Chrome's memory-only `storage.session`, scoped to the current window and restricted to trusted extension contexts. Closing only the panel preserves this work. **Clear session** or **New document** removes the previous session; closing the window also removes its saved session. Chrome clears session storage when the browser restarts or the extension is disabled, reloaded, or updated. No document session is written to `storage.local`, `storage.sync`, or web localStorage. Firebase SDKs separately maintain service state such as App Check tokens and installation identifiers. Explicit copy and save actions place reviewed text in the clipboard or a downloaded file. The localhost development app does not use extension session recovery.
 
 When you use the copied text in another AI tool, that tool receives the text you share. Airlock's local restoration applies to responses generated inside Airlock.
 
@@ -162,7 +169,7 @@ lines and separator lines, and scans the remaining text in overlapping chunks of
 up to 1,200 characters. Model entities are matched back to the original document,
 including its spacing and line breaks, for the sharing preview.
 
-Completed chunks are cached in page memory for retries of the current document.
+Completed chunks are cached for retries of the current document and checkpointed in extension session memory.
 Editing or replacing the original document clears the cache. **Stop scan** aborts
 the on-device prompt. Each model chunk has a 60-second timeout, and an interrupted
 or failed scan keeps the sharing preview unavailable until a full scan succeeds.
@@ -190,7 +197,7 @@ TXT exports contain the reviewed text. To share that version, use the TXT export
 
 ## Remote Config
 
-Open **Settings and Firebase tests → Fetch Firebase settings** to fetch configuration from your Firebase project. Fetching is disabled while **On-device only** is selected. Config requests use Firebase installation metadata.
+In the localhost development app, open **Settings → Remote settings → Fetch Firebase settings**. These controls are development-only and are not shown in the packaged extension. There is no local-only switch. Config requests use Firebase installation metadata.
 
 Publish these optional parameters in the Firebase Remote Config console.
 
@@ -223,13 +230,17 @@ Runtime Firebase initialization currently supports the unpacked extension and th
 
 ### Verification status
 
-The committed suite currently contains 21 tests covering five fictional document snippets, explicit keep decisions, placeholder reuse, restoration, question masking, ordinary question wording, and unmatched answer evidence.
+See [TEST_REPORT.md](TEST_REPORT.md) for the latest measured results and unresolved findings. Passing code tests does not establish live-model accuracy.
+
+The automated suite contains 32 tests covering privacy rules, explicit keep decisions, placeholder restoration, question validation, supporting passages, imports, page extraction, request bookkeeping, and session serialization/recovery with mocked Chrome storage. On 27 November 2026, all 32 tests, TypeScript checks, the web build, and the extension build passed.
 
 Development browser checks have exercised the packaged extension's imports, offline image and scanned-PDF OCR, local PDF font and character-map loading, 330-pixel layout, stage navigation, back navigation, result invalidation, and reset behavior. These browser checks were run separately from the committed test suite.
 
-Privacy controls and document questions were also exercised with a simulated local model. Cloud payload checks and Remote Config application used simulated Firebase responses. Live on-device detection, cloud analysis, and offline fallback were demonstrated during development. Newer flow changes and real-world document quality still need a fresh live-model evaluation before the submission demo.
+Privacy controls and document questions were also exercised with a simulated local model. Cloud payload checks and Remote Config application used simulated Firebase responses. Live on-device detection, cloud analysis, and offline fallback were demonstrated during development. The maintainer reports judge onboarding verified on 27 November 2026. This is a manual verification report, separate from the automated checks; it does not establish detection accuracy for arbitrary documents.
 
 Worker tests cover on-demand extraction, direct-file routing, and restricted-page errors. Live document viewers vary; inaccessible ones fall back to file import.
+
+**Known limitation:** a date introduced by “born on” can remain visible even when the detector identifies it. “Date of birth” and “DOB” labels are recognized. This was reproduced on 27 November 2026; manually hide such dates in the preview before sharing. See the test report for the reproduction and other unresolved findings.
 
 ## Troubleshooting
 
@@ -238,13 +249,12 @@ Worker tests cover on-demand extraction, direct-file routing, and restricted-pag
 | Local AI setup fails | Use supported desktop Chrome, check the Prompt API flag, relaunch, and allow the initial model download to finish |
 | App Check returns HTTP 403 | Register the token from the extension side panel's Console against the correct Firebase web app, then reopen the panel |
 | An old extension error remains visible | Clear the saved errors in `chrome://extensions`, reproduce the action, and inspect any new message |
-| Cloud-preferred analysis reports `on_device` | Check connectivity, App Check, and cloud availability; use the cloud diagnostic to surface a cloud-only failure |
+| Cloud-preferred analysis reports `on_device` | Check connectivity, App Check, and cloud availability; use the localhost development app’s cloud diagnostic to investigate a cloud-only failure |
 | Sharing is blocked | Remove or hide remaining recognized private details, or explicitly approve the intended values in the Hide step |
 | A question loses ordinary wording | Reload the latest extension build and prepare the original question again; inspect the editable question before sending |
 | No answer or checklist passage matches | Inspect the original text and ask a more specific question; table extraction and OCR may affect the wording |
 | A PDF produces a warning | Rebuild and reload, retry with the bundled fonts and character maps, and capture the warning message at the top of the error card |
 | Current page is unavailable | Click Airlock’s toolbar icon on that page, then choose Use this page; use Open file for protected viewers |
-| A reviewed paste cannot be inserted | Keep the original draft unchanged, or paste again for a fresh review; use Copy if the editor cannot accept insertion |
 | The imported text is incomplete | Compare it with the original and correct or paste the relevant passage before detection |
 | Remote settings fail to load | Continue with the active defaults and check the project's Remote Config setup |
 
@@ -252,7 +262,7 @@ Worker tests cover on-demand extraction, direct-file routing, and restricted-pag
 
 | Path | Responsibility |
 | --- | --- |
-| [src/main.tsx](src/main.tsx) | Guided flow, privacy controls, requests, results, and receipts |
+| [src/main.tsx](src/main.tsx) | Guided flow, privacy controls, requests, results, and AI request details |
 | [src/firebase.ts](src/firebase.ts) | Firebase initialization, App Check, model schemas, and inference modes |
 | [src/privacy.ts](src/privacy.ts) | Local format checks, privacy choices, placeholders, restoration, and sharing checks |
 | [src/questions.ts](src/questions.ts) | Question candidate validation and supporting-passage checks |
@@ -260,6 +270,7 @@ Worker tests cover on-demand extraction, direct-file routing, and restricted-pag
 | [src/documents.ts](src/documents.ts) | File import, PDF extraction, and limits |
 | [src/scan.ts](src/scan.ts) | Scan preparation, smaller chunks, and source matching |
 | [src/ocr.ts](src/ocr.ts) | Local English OCR worker and image processing |
+| [src/session.ts](src/session.ts) | Per-window session storage, Map serialization, and ordered save/clear operations |
 | [src/settings.ts](src/settings.ts) | Remote Config defaults, fetch, and validation |
 | [src/extension.ts](src/extension.ts) | Side-panel selection and on-demand page/document extraction |
 | [extension/worker.js](extension/worker.js) | Current-page extraction, Office source resolution, permissions, and selected-text handoff |
@@ -268,13 +279,20 @@ Worker tests cover on-demand extraction, direct-file routing, and restricted-pag
 | [pdf-assets.ts](pdf-assets.ts) | Bundle PDF fonts and character maps |
 | [tests/privacy.test.ts](tests/privacy.test.ts) | Local privacy and question regression tests |
 
-The extension uses `contextMenus`, `sidePanel`, `activeTab`, and `scripting` for user-requested extraction. `tabs` lets the open side panel identify the current page after navigation. Optional HTTP/HTTPS host permissions are requested for the current page or document source; they do not enable background scanning. `storage` remains for clearing old monitoring settings during upgrade. File URL access supports local documents and requires Chrome’s user-controlled toggle. Firebase host permissions and the local OCR WebAssembly policy remain unchanged.
+The extension uses `contextMenus`, `sidePanel`, `activeTab`, and `scripting` for user-requested extraction. `tabs` lets the open side panel identify the current page after navigation. Optional HTTP/HTTPS host permissions are requested for the current page or document source; they do not enable background scanning. `storage` supports memory-only session recovery and clearing old monitoring settings during upgrade. File URL access supports local documents and requires Chrome’s user-controlled toggle. Firebase host permissions and the local OCR WebAssembly policy remain unchanged.
 
-## Hackathon submission preparation
+## Hackathon project
 
-Airlock is being developed for the Firebase Hybrid AI hackathon's Web/Chrome category. The submission description should explain the local detection, user review, cloud or local analysis, and browser-side restoration shown in the demo.
+Airlock targets the Firebase Hybrid AI hackathon's **Web / Chrome extension** platform. The project combines on-device private-detail detection, user-controlled review, cloud-preferred analysis with local fallback, and browser-side restoration through Firebase AI Logic. App Check uses the debug provider for this unpacked prototype; Remote Config tools are available in localhost development.
 
-Before submitting, prepare the public repository, an open-source project license, complete setup instructions, the English project description, and the public YouTube demonstration of up to three minutes. Include a way for judges to load and test the extension and document any required Chrome flags or App Check setup. [Hackathon requirements](https://firebasehybridaihackathon.devpost.com/)
+- [Demo video](https://www.youtube.com/watch?v=73lBKQSA-4U)
+- [Public source repository](https://github.com/anshul-chauhan2004/Airlock)
+- [Install and test](#install-the-unpacked-extension), including [Firebase and App Check setup](#firebase-setup)
+- [Measured results and known limitations](TEST_REPORT.md)
+
+Work during the submission period includes the guided extension UI, local file/OCR and current-page import, privacy choices and editable placeholders, document review and action checklists, reviewed follow-up questions, supporting passages, AI request details, scan cancellation/caching, and session recovery. Third-party libraries and bundled assets are credited in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Judges can build the extension from source using the instructions above and their Firebase web app configuration. No paid Airlock account is required. The demo has been recorded and uploaded; completing the Devpost entry is a separate final step. [Hackathon requirements](https://firebasehybridaihackathon.devpost.com/)
 
 ## License
 
@@ -284,4 +302,4 @@ Copyright 2026 Anshul Chauhan. Licensed under the [Apache License 2.0](LICENSE).
 
 Use fictional documents in issues and tests. Never upload private documents, App Check debug tokens, or service-account credentials. For changes, run `npm test`, `npm run build`, and `npm run build:extension`. GitHub Actions runs these checks on pushes to `main` and pull requests. Build checks do not validate live model availability or Firebase access.
 
-The project is a hackathon prototype distributed as an unpacked extension. A fresh install requires the user's Firebase project and App Check debug-token registration. Public store distribution and a hosted production app need additional App Check setup. The demo video and live-model acceptance check are still to be completed.
+The project is a hackathon prototype distributed as an unpacked extension. A fresh install requires the user's Firebase project and App Check debug-token registration. Public store distribution and a hosted production app need additional App Check setup. The demo is linked above. Automated verification and remaining limitations are documented separately from maintainer-reported manual checks.

@@ -100,3 +100,8 @@ chrome.runtime.onMessage.addListener((request, sender, respond) => {
   return true
 })
 chrome.windows.onRemoved.addListener(id => { panels.delete(id); pending.delete(id) })
+
+// Closing a whole window discards its private session. Closing only the panel does not.
+chrome.windows?.onRemoved?.addListener(windowId => {
+  void chrome.storage.session.remove(`airlock-session-v1-${windowId}`).catch(() => {})
+})

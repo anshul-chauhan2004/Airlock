@@ -13,6 +13,7 @@ import { readLocalDocument } from './documents'
 import { defaultSettings, fetchSettings } from './settings'
 import { groundedEntities, originalEntities, scanChunkTimeout, scanPlan } from './scan'
 import { preparePrivateQuestion, readAnswer } from './questions'
+import { sessionStore } from './session'
 import '@fontsource-variable/inter'
 import './style.css'
 
@@ -139,6 +140,16 @@ function ProcessTime({ process, active, message }: {
 
 type Stage = 'setup' | 'open' | 'privacy' | 'review' | 'result' | 'question' | 'receipt'
 
+type SavedSession = {
+  document: string; stage: Stage; receiptReturn: Stage
+  fileInfo: { name: string; note: string } | null
+  reviewKind: 'quick' | 'deep'; choices: PrivacyChoice[]; review: Review | null
+  mode: string; analysis: ResultData | null; receipt: Receipt | null
+  question: string; preparedQuestion: Review | null; answer: ResultData | null
+  settings: typeof defaultSettings; cache: Map<string, Entity[]>
+  interrupted: string | null
+}
+
 function App() {
   const [stage, setStage] = useState<Stage>('setup')
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -172,6 +183,55 @@ function App() {
   const [preparedQuestion, setPreparedQuestion] = useState<Review | null>(null)
   const [answer, setAnswer] = useState<ResultData | null>(null)
   const [diagnostic, setDiagnostic] = useState<ResultData | null>(null)
+  const session = useRef<ReturnType<typeof sessionStore> | null>(null)
+  const [sessionLoaded, setSessionLoaded] = useState(!isExtension)
+  const [sessionError, setSessionError] = useState('')
+  const [interrupted, setInterrupted] = useState<string | null>(null)
+  const [cacheVersion, setCacheVersion] = useState(0)
+
+  useEffect(() => {
+    if (!isExtension) return
+    let active = true
+    void (async () => {
+      try {
+        const { id } = await chrome.windows.getCurrent()
+        if (id === undefined) throw new Error('No window')
+        const store = sessionStore(chrome.storage.session, id)
+        const saved = await store.load<SavedSession>()
+        if (!active) return
+        session.current = store
+        if (saved && typeof saved.document === 'string' && saved.cache instanceof Map) {
+          setDocument(saved.document); setFileInfo(saved.fileInfo)
+          setChoices(saved.choices); setReview(saved.review); setReviewKind(saved.reviewKind)
+          setMode(saved.mode); setAnalysis(saved.analysis); setQuestion(saved.question)
+          setPreparedQuestion(saved.preparedQuestion); setAnswer(saved.answer)
+          setSettings(saved.settings); setReceiptReturn(saved.receiptReturn)
+          setReceipt(saved.receipt?.source === 'Request in progress'
+            ? { ...saved.receipt, source: 'Interrupted — completion unknown' } : saved.receipt)
+          scanCache.current = saved.cache
+          setInterrupted(saved.interrupted)
+          setStage(saved.stage)
+        }
+      } catch {
+        if (active) setSessionError('Session recovery is unavailable. Keep this panel open to retain your work.')
+      } finally { if (active) setSessionLoaded(true) }
+    })()
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    if (!sessionLoaded || !session.current) return
+    const saved: SavedSession = {
+      document, stage, receiptReturn, fileInfo, reviewKind, choices, review, mode,
+      analysis, receipt, question, preparedQuestion, answer, settings,
+      cache: scanCache.current, interrupted: busy ? process?.label ?? 'Operation' : interrupted,
+    }
+    const operation = !document && !review && !busy ? session.current.clear() : session.current.save(saved)
+    void operation.then(() => setSessionError(''), () =>
+      setSessionError('Could not save this session. Keep the panel open to retain your latest work.'))
+  }, [sessionLoaded, document, stage, receiptReturn, fileInfo, reviewKind, choices, review,
+    mode, analysis, receipt, question, preparedQuestion, answer, settings, busy, process, interrupted, cacheVersion])
+
   const fileInput = useRef<HTMLInputElement>(null)
   const preview = useRef<HTMLTextAreaElement>(null)
   const hasDetails = !!review && containsDetectedEntity(review.text, review)
@@ -206,6 +266,7 @@ function App() {
   async function run(action: () => Promise<void>, label?: string) {
     if (running.current) return
     running.current = true
+    setInterrupted(null)
     const startedAt = performance.now()
     if (label) setProcess({ label, startedAt })
     setBusy(true)
@@ -232,6 +293,7 @@ function App() {
     setFeedback('')
   }
   function updateDocument(text: string) {
+    setInterrupted(null)
     setProcess(null)
     scanCache.current.clear()
     setDocument(text)
@@ -281,7 +343,7 @@ function App() {
           entities.push(...cached)
           continue
         }
-        setBusyLabel(`Scanning on-device · ${index + 1} of ${plan.chunks.length}`)
+        setBusyLabel(`Scanning for private details… · ${index + 1} of ${plan.chunks.length}`)
         const timeout = setTimeout(() => controller.abort(new DOMException(
           'Local scanning timed out. Try a shorter section of the document.', 'TimeoutError',
         )), scanChunkTimeout)
@@ -299,6 +361,7 @@ ${chunk}`,
           entities.push(...found)
           if (scanCache.current.size >= 32) scanCache.current.delete(scanCache.current.keys().next().value!)
           scanCache.current.set(chunk, found)
+          setCacheVersion(value => value + 1)
         } finally {
           clearTimeout(timeout)
         }
@@ -499,10 +562,13 @@ ${preparedQuestion.text}`
   }
   const selected = choices[selectedChoice]
 
+  if (!sessionLoaded) return <main><p role="status">Restoring session…</p></main>
+
   return <main data-stage={stage}>
     <header className="app-header">
       <div className="brand"><span className="brand-mark" aria-hidden="true" /><h1>Airlock</h1></div>
       <div className="header-actions">
+        {!!document && <button className="back-link" disabled={busy} onClick={() => updateDocument('')}>Clear session</button>}
         {localReady && <span className="device-indicator" role="img" aria-label="Local AI ready" title="Local AI ready" />}
         {import.meta.env.DEV && <button className="icon-button" aria-label={settingsOpen ? 'Close settings' : 'Settings'}
           aria-expanded={settingsOpen} onClick={() => setSettingsOpen(!settingsOpen)}>
@@ -533,6 +599,23 @@ ${preparedQuestion.text}`
         </button>
       })}
     </nav>}
+    {sessionError && <p className="error" role="alert">{sessionError}</p>}
+    {interrupted && <p role="status">{interrupted} was interrupted. Your saved work is ready to retry.
+      {['Privacy scan', 'Analysis', 'Question preparation', 'Answer'].includes(interrupted) &&
+        <button className="secondary" disabled={busy} onClick={() => {
+          if (!localReady) {
+            const operation = interrupted
+            void setupLocal(stage).then(() => setInterrupted(operation))
+            return
+          }
+          if (interrupted === 'Privacy scan') void findDetails()
+          else if (interrupted === 'Analysis') void analyze()
+          else if (interrupted === 'Question preparation') void prepareQuestion()
+          else void askQuestion()
+        }}>{localReady ? 'Retry' : 'Set up AI to retry'}</button>}
+    </p>}
+    {!localReady && stage !== 'setup' && !interrupted &&
+      <button className="secondary" disabled={busy} onClick={() => setupLocal(stage)}>Set up local AI to continue</button>}
     {process && <ProcessTime process={process} active={busy && !process.endedAt} message={busyLabel} />}
     {error && <div role="alert">
       <p className="error">{error}</p>
@@ -576,7 +659,7 @@ ${preparedQuestion.text}`
           {isExtension && <> For webpage text, highlight it and right-click <strong>Open in Airlock</strong>.</>}</p>
       </details>
       </div>
-      <button disabled={busy || !document.trim()} onClick={() => localReady ? findDetails() : setupLocal() }>{localReady ? 'Prepare document' : 'Set up local AI'}</button>
+      <button disabled={busy || !document.trim()} onClick={() => localReady ? findDetails() : setupLocal() }>{localReady ? 'Find private details' : 'Set up local AI'}</button>
     </section>}
     {review && <>
       {stage === 'privacy' && <section>
